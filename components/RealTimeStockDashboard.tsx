@@ -10,7 +10,6 @@ interface RealTimeStockDashboardProps {
 
 interface SearchFilters {
   query: string;
-  sector: string;
   gainLoss: string;
   stage2: string;
   abhishekCall: string;
@@ -21,7 +20,6 @@ export default function RealTimeStockDashboard({ portfolioData }: RealTimeStockD
   const [hybridData, setHybridData] = useState<HybridStockData[]>([]);
   const [searchFilters, setSearchFilters] = useState<SearchFilters>({
     query: '',
-    sector: 'All Sectors',
     gainLoss: 'All',
     stage2: 'All',
     abhishekCall: 'All Calls',
@@ -36,7 +34,7 @@ export default function RealTimeStockDashboard({ portfolioData }: RealTimeStockD
 
   // Initialize hybrid data from Excel base
   useEffect(() => {
-    const initializeHybridData = () => {
+    const initializeHybridData = async () => {
       const individualStocks = portfolioData.filter(stock => 
         stock.No !== null && 
         stock.Particulars && 
@@ -45,8 +43,11 @@ export default function RealTimeStockDashboard({ portfolioData }: RealTimeStockD
         stock.Particulars !== null
       );
 
-      const hybrid = individualStocks.map(stock => 
-        realTimeService.createHybridData(stock)
+      // Create hybrid data with live prices
+      const hybrid = await Promise.all(
+        individualStocks.map(async (stock) => 
+          await realTimeService.createHybridData(stock)
+        )
       );
 
       setHybridData(hybrid);
@@ -98,71 +99,27 @@ export default function RealTimeStockDashboard({ portfolioData }: RealTimeStockD
 
     // Apply other filters only when not searching
     if (!searchFilters.query.trim()) {
-      // Sector filter
-      if (searchFilters.sector !== 'All Sectors') {
-        filtered = filtered.filter(stock => {
-          const stockName = stock.baseData.Particulars?.toLowerCase() || '';
-          if (searchFilters.sector === 'Financial Sector') {
-            return stockName.includes('bank') || stockName.includes('finance') || stockName.includes('hdfc') || stockName.includes('icici') || stockName.includes('bajaj') || stockName.includes('savi');
-          }
-          if (searchFilters.sector === 'Tech Sector') {
-            return stockName.includes('tech') || stockName.includes('infosys') || stockName.includes('tcs') || stockName.includes('mindtree') || stockName.includes('kpitt') || stockName.includes('affle') || stockName.includes('tanla');
-          }
-          if (searchFilters.sector === 'Consumer Sector') {
-            return stockName.includes('dmart') || stockName.includes('nestle') || stockName.includes('tata consumer') || stockName.includes('pidilite');
-          }
-          if (searchFilters.sector === 'Power Sector') {
-            return stockName.includes('power') || stockName.includes('suzlon') || stockName.includes('green') || stockName.includes('gensol');
-          }
-          if (searchFilters.sector === 'Green Sector') {
-            return stockName.includes('gas') || stockName.includes('pipes') || stockName.includes('astral') || stockName.includes('polyplex') || stockName.includes('harion');
-          }
-          if (searchFilters.sector === 'Chemical Sector') {
-            return stockName.includes('science') || stockName.includes('nitrite') || stockName.includes('organic') || stockName.includes('fine organic') || stockName.includes('gravita') || stockName.includes('grinwell');
-          }
-          if (searchFilters.sector === 'Insurance') {
-            return stockName.includes('life') || stockName.includes('sbi');
-          }
-          if (searchFilters.sector === 'Exit Stocks') {
-            return stockName.includes('irfly') || stockName.includes('happiest') || stockName.includes('essentivitiy') || stockName.includes('easemytrip');
-          }
-          return true;
-        });
-      }
-
       // Gain/Loss filter
       if (searchFilters.gainLoss !== 'All') {
-        if (searchFilters.gainLoss === 'Gainers Only') {
+        if (searchFilters.gainLoss === 'Gain') {
           filtered = filtered.filter(stock => stock.calculated.gainLoss > 0);
-        } else if (searchFilters.gainLoss === 'Losers Only') {
+        } else if (searchFilters.gainLoss === 'Loss') {
           filtered = filtered.filter(stock => stock.calculated.gainLoss < 0);
-        } else if (searchFilters.gainLoss === 'Break Even') {
-          filtered = filtered.filter(stock => stock.calculated.gainLoss === 0);
         }
       }
 
       // Stage-2 filter
       if (searchFilters.stage2 !== 'All') {
-        if (searchFilters.stage2 === 'Stage-2 Yes') {
-          filtered = filtered.filter(stock => stock.baseData['Stage-2'] === 'Yes');
-        } else if (searchFilters.stage2 === 'Stage-2 No') {
-          filtered = filtered.filter(stock => stock.baseData['Stage-2'] !== 'Yes');
-        }
+        filtered = filtered.filter(stock => 
+          stock.baseData['Stage-2'] === searchFilters.stage2
+        );
       }
 
       // Abhishek's call filter
       if (searchFilters.abhishekCall !== 'All Calls') {
-        filtered = filtered.filter(stock => {
-          const abhishekCall = stock.baseData.Abhishek?.toLowerCase() || '';
-          if (searchFilters.abhishekCall === 'Hold') {
-            return abhishekCall === 'hold' || abhishekCall === '';
-          } else if (searchFilters.abhishekCall === 'Exit') {
-            return abhishekCall.includes('exit');
-          } else if (searchFilters.abhishekCall === 'Must Exit') {
-            return abhishekCall.includes('must exit');
-          }
-          return true;
-        });
+        filtered = filtered.filter(stock => 
+          stock.baseData.Abhishek === searchFilters.abhishekCall
+        );
       }
 
       // Price range filter
@@ -170,16 +127,14 @@ export default function RealTimeStockDashboard({ portfolioData }: RealTimeStockD
         filtered = filtered.filter(stock => {
           const price = stock.calculated.currentCMP;
           switch (searchFilters.priceRange) {
-            case 'Under ₹100':
-              return price < 100;
-            case '₹100 - ₹500':
-              return price >= 100 && price < 500;
-            case '₹500 - ₹1000':
-              return price >= 500 && price < 1000;
+            case 'Under ₹1000':
+              return price < 1000;
             case '₹1000 - ₹5000':
               return price >= 1000 && price < 5000;
-            case 'Above ₹5000':
-              return price >= 5000;
+            case '₹5000 - ₹10000':
+              return price >= 5000 && price < 10000;
+            case 'Above ₹10000':
+              return price >= 10000;
             default:
               return true;
           }
@@ -190,27 +145,15 @@ export default function RealTimeStockDashboard({ portfolioData }: RealTimeStockD
     return filtered;
   };
 
-  // Get search match indicator
-  const getSearchMatchIndicator = (stock: HybridStockData) => {
-    if (!searchFilters.query.trim()) return null;
-    
-    return (
-      <div className="text-xs font-medium text-blue-600 mt-1">
-        🔍 Search Match
-      </div>
-    );
-  };
-
   const filteredStocks = getFilteredStocks();
 
-  const handleFiltersChange = (filters: SearchFilters) => {
-    setSearchFilters(filters);
+  const handleFiltersChange = (newFilters: Partial<SearchFilters>) => {
+    setSearchFilters(prev => ({ ...prev, ...newFilters }));
   };
 
   const handleClearFilters = () => {
     setSearchFilters({
       query: '',
-      sector: 'All Sectors',
       gainLoss: 'All',
       stage2: 'All',
       abhishekCall: 'All Calls',
@@ -218,51 +161,37 @@ export default function RealTimeStockDashboard({ portfolioData }: RealTimeStockD
     });
   };
 
-  const formatCurrency = (value: number) => {
-    if (value >= 10000000) return `₹${(value / 10000000).toFixed(2)}Cr`;
-    if (value >= 100000) return `₹${(value / 100000).toFixed(2)}L`;
-    if (value >= 1000) return `₹${(value / 1000).toFixed(2)}K`;
-    return `₹${value.toFixed(2)}`;
-  };
+  const handleManualRefresh = async () => {
+    setLoading(true);
+    try {
+      const individualStocks = portfolioData.filter(stock => 
+        stock.No !== null && 
+        stock.Particulars && 
+        stock.Particulars !== 'Particulars' &&
+        !stock.Particulars.includes('Sector') &&
+        stock.Particulars !== null
+      );
 
-  const formatPercentage = (value: number) => {
-    return `${value.toFixed(2)}%`;
-  };
-
-  const getGainLossColor = (value: number) => {
-    if (value > 0) return 'text-green-600';
-    if (value < 0) return 'text-red-600';
-    return 'text-gray-600';
-  };
-
-  const getGainLossIcon = (value: number) => {
-    if (value > 0) return '📈';
-    if (value < 0) return '📉';
-    return '📊';
-  };
-
-  const getAbhishekColor = (value: string | null) => {
-    if (!value) return 'bg-gray-100 text-gray-800';
-    if (value.includes('Exit') || value.includes('exit')) return 'bg-red-100 text-red-800';
-    if (value.includes('Hold')) return 'bg-blue-100 text-blue-800';
-    return 'bg-green-100 text-green-800';
-  };
-
-  const getLiveDataIndicator = (stock: HybridStockData) => {
-    if (!stock.liveData) return 'Live Data';
-    
-    const change = stock.liveData.change;
-    if (change > 0) return '🟢 Live +' + change.toFixed(2);
-    if (change < 0) return '🔴 Live ' + change.toFixed(2);
-    return '⚪ Live 0.00';
+      const updatedHybridData = await Promise.all(
+        individualStocks.map(async (stock) => 
+          await realTimeService.createHybridData(stock)
+        )
+      );
+      setHybridData(updatedHybridData);
+      setLastUpdate(new Date());
+    } catch (error) {
+      console.error("Error refreshing data:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center min-h-64">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-lg text-gray-600">Initializing real-time dashboard...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading live stock data...</p>
         </div>
       </div>
     );
@@ -270,235 +199,213 @@ export default function RealTimeStockDashboard({ portfolioData }: RealTimeStockD
 
   return (
     <div className="space-y-6">
-      {/* Dashboard Content */}
-      <div className="container mx-auto px-4 py-6">
-        {/* Dashboard Title and Status */}
-        <div className="flex items-center justify-between mb-6">
+      {/* Dashboard Header */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Real-Time Stock Dashboard</h1>
-            <p className="text-gray-600 mt-2">
-              Live portfolio tracking with {hybridData.length} stocks • Updates every 15 seconds
-            </p>
-          </div>
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2 text-sm text-gray-600">
-              <span>🕐</span>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Real-Time Stock Dashboard</h1>
+            <div className="flex items-center gap-4 text-sm text-gray-600">
+              <span>Total Stocks: {hybridData.length}</span>
               <span>Last Update: {lastUpdate.toLocaleTimeString()}</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <span className={`w-3 h-3 rounded-full ${isLive ? 'bg-green-500' : 'bg-red-500'}`}></span>
-              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                isLive 
-                  ? 'bg-green-50 text-green-700 border border-green-200' 
-                  : 'bg-red-50 text-red-700 border border-red-200'
-              }`}>
-                {isLive ? '🟢 Live Updates' : '🔴 Offline'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Search Bar */}
-        <div className="bg-white rounded-lg border p-4 mb-6">
-          <div className="flex items-center space-x-4">
-            <div className="relative flex-1 max-w-md">
-              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">🔍</span>
-              <input
-                type="text"
-                placeholder="Search stocks by name or symbol..."
-                value={searchFilters.query}
-                onChange={(e) => {
-                  const query = e.target.value;
-                  setSearchFilters(prev => ({ ...prev, query }));
-                }}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-            {searchFilters.query.trim() && (
-              <button
-                onClick={() => setSearchFilters(prev => ({ ...prev, query: '' }))}
-                className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                ✕ Clear Search
-              </button>
-            )}
-            <span className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full text-sm">
-              {filteredStocks.length} Stocks Found
-            </span>
-          </div>
-        </div>
-
-        {/* Advanced Search */}
-        <AdvancedSearch
-          filters={searchFilters}
-          onFiltersChange={handleFiltersChange}
-          onClearFilters={handleClearFilters}
-          totalResults={filteredStocks.length}
-        />
-
-        {/* Results Summary */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-sm text-gray-600">
-            Showing {filteredStocks.length} of {hybridData.length} stocks
-          </div>
-          <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-500">Sort by:</span>
-            <select className="text-sm border border-gray-300 rounded px-2 py-1">
-              <option>Name A-Z</option>
-              <option>Name Z-A</option>
-              <option>Gain/Loss High-Low</option>
-              <option>Gain/Loss Low-High</option>
-              <option>Investment High-Low</option>
-              <option>Investment Low-High</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Individual Stock Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredStocks.map((stock) => (
-            <div 
-              key={stock.baseData.No} 
-              className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer border-l-4 p-4"
-              style={{
-                borderLeftColor: stock.calculated.gainLoss > 0 ? '#10b981' : 
-                                 stock.calculated.gainLoss < 0 ? '#ef4444' : '#6b7280'
-              }}
-              onClick={() => setSelectedStock(stock)}
-            >
-              {/* Stock Header */}
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    {stock.baseData.Particulars}
-                  </h3>
-                  <p className="text-sm text-gray-600 font-mono">
-                    {stock.baseData['NSE/BSE']}
-                  </p>
-                  {/* Live Data Indicator */}
-                  <div className="text-xs font-medium text-blue-600 mt-1">
-                    {getLiveDataIndicator(stock)}
-                  </div>
-                  {/* Search Match Indicator */}
-                  {getSearchMatchIndicator(stock)}
-                </div>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getAbhishekColor(stock.baseData.Abhishek)}`}>
-                  {stock.baseData.Abhishek || 'Hold'}
-                </span>
+              <div className="flex items-center gap-2">
+                {isLive ? (
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    <span className="w-2 h-2 bg-green-400 rounded-full mr-1 animate-pulse"></span>
+                    LIVE - Auto-updating every 15s
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                    <span className="w-2 h-2 bg-gray-400 rounded-full mr-1"></span>
+                    STATIC - No live updates
+                  </span>
+                )}
               </div>
-
-              {/* Price and Performance */}
-              <div className="space-y-2 mb-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Live CMP</span>
-                  <span className="text-lg font-bold text-blue-600">
-                    ₹{stock.calculated.currentCMP.toFixed(2)}
-                  </span>
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Purchase</span>
-                  <span className="text-sm text-gray-700">
-                    ₹{stock.baseData['Purchase Price']?.toFixed(2) || 'N/A'}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Gain/Loss</span>
-                  <div className="flex items-center space-x-1">
-                    <span>{getGainLossIcon(stock.calculated.gainLoss)}</span>
-                    <span className={`font-semibold ${getGainLossColor(stock.calculated.gainLoss)}`}>
-                      {formatCurrency(stock.calculated.gainLoss)}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Gain/Loss %</span>
-                  <span className={`font-semibold ${getGainLossColor(stock.calculated.gainLossPercent)}`}>
-                    {formatPercentage(stock.calculated.gainLossPercent)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Investment Details */}
-              <div className="space-y-2 pt-3 border-t mb-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Quantity</span>
-                  <span className="text-sm font-medium">{stock.baseData.Qty}</span>
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Investment</span>
-                  <span className="text-sm font-medium text-blue-600">
-                    {formatCurrency(stock.baseData.Investment || 0)}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Present Value</span>
-                  <span className="text-sm font-medium text-green-600">
-                    {formatCurrency(stock.calculated.presentValue)}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Portfolio %</span>
-                  <span className="text-sm font-medium text-purple-600">
-                    {formatPercentage(stock.calculated.portfolioPercentage)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Live Data Status */}
-              {stock.liveData && (
-                <div className="space-y-2 pt-3 border-t mb-4">
-                  <div className="text-xs text-gray-500 text-center">
-                    <div className="flex items-center justify-center space-x-2">
-                      <span>🔄</span>
-                      <span>Live: {stock.liveData.lastUpdated.toLocaleTimeString()}</span>
-                    </div>
-                    <div className="mt-1">
-                      <span className={`text-xs ${stock.liveData.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {stock.liveData.change >= 0 ? '+' : ''}{stock.liveData.change.toFixed(2)} 
-                        ({stock.liveData.changePercent.toFixed(2)}%)
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Action Button */}
-              <button 
-                className="w-full mt-3 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedStock(stock);
-                }}
-              >
-                👁️ View Details
-              </button>
             </div>
-          ))}
-        </div>
-
-        {/* No Results Message */}
-        {filteredStocks.length === 0 && (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">🔍</div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No stocks found</h3>
-            <p className="text-gray-600 mb-4">
-              Try adjusting your search criteria or filters
-            </p>
+          </div>
+          
+          <div className="flex gap-2">
             <button
-              onClick={handleClearFilters}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              onClick={handleManualRefresh}
+              disabled={loading}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
             >
-              Clear All Filters
+              {loading ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                  </svg>
+                  Refreshing...
+                </>
+              ) : (
+                <>
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Refresh Now
+                </>
+              )}
             </button>
           </div>
-        )}
+        </div>
       </div>
+
+      {/* Search Bar */}
+      <div className="bg-white rounded-lg border p-4 mb-6">
+        <div className="flex items-center space-x-4">
+          <div className="relative flex-1 max-w-md">
+            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">🔍</span>
+            <input
+              type="text"
+              placeholder="Search stocks by name or symbol..."
+              value={searchFilters.query}
+              onChange={(e) => {
+                const query = e.target.value;
+                setSearchFilters(prev => ({ ...prev, query }));
+              }}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+          {searchFilters.query.trim() && (
+            <button
+              onClick={() => setSearchFilters(prev => ({ ...prev, query: '' }))}
+              className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              ✕ Clear Search
+            </button>
+          )}
+          <span className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full text-sm">
+            {filteredStocks.length} Stocks Found
+          </span>
+        </div>
+      </div>
+
+      {/* Advanced Search */}
+      <AdvancedSearch
+        filters={searchFilters}
+        onFiltersChange={handleFiltersChange}
+        onClearFilters={handleClearFilters}
+        totalResults={filteredStocks.length}
+      />
+
+      {/* Results Summary */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-sm text-gray-600">
+          Showing {filteredStocks.length} of {hybridData.length} stocks
+        </div>
+        <div className="flex items-center space-x-2">
+          <span className="text-sm text-gray-500">Sort by:</span>
+          <select className="text-sm border border-gray-300 rounded px-2 py-1">
+            <option>Name A-Z</option>
+            <option>Name Z-A</option>
+            <option>Gain/Loss High-Low</option>
+            <option>Gain/Loss Low-High</option>
+            <option>Investment High-Low</option>
+            <option>Investment Low-High</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Individual Stock Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {filteredStocks.map((stock) => (
+          <div 
+            key={stock.baseData.No} 
+            className="bg-white rounded-lg shadow-md p-4 hover:shadow-lg transition-shadow cursor-pointer border-l-4 border-blue-500"
+            onClick={() => setSelectedStock(stock)}
+          >
+            <div className="flex justify-between items-start mb-3">
+              <div>
+                <h3 className="font-semibold text-lg text-gray-800">
+                  {stock.baseData.Particulars}
+                </h3>
+                <p className="text-sm text-gray-600">{stock.baseData['NSE/BSE']}</p>
+              </div>
+              <div className="text-right">
+                <div className="flex items-center gap-2">
+                  {stock.liveData ? (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      <span className="w-2 h-2 bg-green-400 rounded-full mr-1 animate-pulse"></span>
+                      LIVE
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                      <span className="w-2 h-2 bg-gray-400 rounded-full mr-1"></span>
+                      STATIC
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 mb-3">
+              <div>
+                <p className="text-sm text-gray-600">Purchase Price</p>
+                <p className="font-semibold text-gray-800">₹{stock.baseData['Purchase Price']?.toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Current CMP</p>
+                <p className={`font-bold text-lg ${
+                  stock.liveData ? 'text-green-600' : 'text-gray-600'
+                }`}>
+                  ₹{stock.calculated.currentCMP?.toLocaleString()}
+                  {stock.liveData && (
+                    <span className="ml-2 text-xs text-green-600">
+                      (Live)
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 mb-3">
+              <div>
+                <p className="text-sm text-gray-600">Quantity</p>
+                <p className="font-semibold text-gray-800">{stock.baseData.Qty}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Present Value</p>
+                <p className="font-semibold text-gray-800">₹{stock.calculated.presentValue?.toLocaleString()}</p>
+              </div>
+            </div>
+            
+            <div className="border-t pt-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Gain/Loss</span>
+                <div className="text-right">
+                  <p className={`font-bold ${
+                    stock.calculated.gainLoss >= 0 ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    ₹{Math.abs(stock.calculated.gainLoss)?.toLocaleString()}
+                  </p>
+                  <p className={`text-sm ${
+                    stock.calculated.gainLoss >= 0 ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {stock.calculated.gainLoss >= 0 ? '+' : '-'}{Math.abs(stock.calculated.gainLossPercent)?.toFixed(2)}%
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* No Results Message */}
+      {filteredStocks.length === 0 && (
+        <div className="text-center py-12">
+          <div className="text-6xl mb-4">🔍</div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No stocks found</h3>
+          <p className="text-gray-600 mb-4">
+            Try adjusting your search criteria or filters
+          </p>
+          <button
+            onClick={handleClearFilters}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Clear All Filters
+          </button>
+        </div>
+      )}
 
       {/* Stock Detail Modal */}
       {selectedStock && (
@@ -536,14 +443,18 @@ export default function RealTimeStockDashboard({ portfolioData }: RealTimeStockD
                       </div>
                       <div>
                         <div className="text-sm text-gray-600">Gain/Loss</div>
-                        <div className={`text-lg font-semibold ${getGainLossColor(selectedStock.calculated.gainLoss)}`}>
-                          {formatCurrency(selectedStock.calculated.gainLoss)}
+                        <div className={`text-lg font-semibold ${
+                          selectedStock.calculated.gainLoss >= 0 ? 'text-green-600' : 'text-red-600'
+                        }`}>
+                          ₹{Math.abs(selectedStock.calculated.gainLoss).toLocaleString()}
                         </div>
                       </div>
                       <div>
                         <div className="text-sm text-gray-600">Gain/Loss %</div>
-                        <div className={`text-lg font-semibold ${getGainLossColor(selectedStock.calculated.gainLossPercent)}`}>
-                          {formatPercentage(selectedStock.calculated.gainLossPercent)}
+                        <div className={`text-lg font-semibold ${
+                          selectedStock.calculated.gainLoss >= 0 ? 'text-green-600' : 'text-red-600'
+                        }`}>
+                          {selectedStock.calculated.gainLoss >= 0 ? '+' : '-'}{Math.abs(selectedStock.calculated.gainLossPercent).toFixed(2)}%
                         </div>
                       </div>
                     </div>
@@ -561,15 +472,15 @@ export default function RealTimeStockDashboard({ portfolioData }: RealTimeStockD
                       </div>
                       <div>
                         <div className="text-sm text-gray-600">Total Investment</div>
-                        <div className="text-lg font-semibold text-blue-600">{formatCurrency(selectedStock.baseData.Investment || 0)}</div>
+                        <div className="text-lg font-semibold text-blue-600">₹{selectedStock.baseData.Investment?.toLocaleString() || 0}</div>
                       </div>
                       <div>
                         <div className="text-sm text-gray-600">Live Value</div>
-                        <div className="text-lg font-semibold text-green-600">{formatCurrency(selectedStock.calculated.presentValue)}</div>
+                        <div className="text-lg font-semibold text-green-600">₹{selectedStock.calculated.presentValue.toLocaleString()}</div>
                       </div>
                       <div>
                         <div className="text-sm text-gray-600">Portfolio %</div>
-                        <div className="text-lg font-semibold text-purple-600">{formatPercentage(selectedStock.calculated.portfolioPercentage)}</div>
+                        <div className="text-lg font-semibold text-purple-600">{selectedStock.calculated.portfolioPercentage.toFixed(2)}%</div>
                       </div>
                     </div>
                   </div>
@@ -595,13 +506,17 @@ export default function RealTimeStockDashboard({ portfolioData }: RealTimeStockD
                         </div>
                         <div>
                           <div className="text-sm text-gray-600">Change</div>
-                          <div className={`text-lg font-semibold ${getGainLossColor(selectedStock.liveData.change)}`}>
+                          <div className={`text-lg font-semibold ${
+                            selectedStock.liveData.change >= 0 ? 'text-green-600' : 'text-red-600'
+                          }`}>
                             {selectedStock.liveData.change >= 0 ? '+' : ''}{selectedStock.liveData.change.toFixed(2)}
                           </div>
                         </div>
                         <div>
                           <div className="text-sm text-gray-600">Change %</div>
-                          <div className={`text-lg font-semibold ${getGainLossColor(selectedStock.liveData.changePercent)}`}>
+                          <div className={`text-lg font-semibold ${
+                            selectedStock.liveData.changePercent >= 0 ? 'text-green-600' : 'text-red-600'
+                          }`}>
                             {selectedStock.liveData.changePercent >= 0 ? '+' : ''}{selectedStock.liveData.changePercent.toFixed(2)}%
                           </div>
                         </div>
@@ -634,7 +549,7 @@ export default function RealTimeStockDashboard({ portfolioData }: RealTimeStockD
                       </div>
                       <div>
                         <div className="text-sm text-gray-600">Market Cap</div>
-                        <div className="text-lg font-semibold">{formatCurrency(selectedStock.baseData['Market Cap'] || 0)}</div>
+                        <div className="text-lg font-semibold">₹{selectedStock.baseData['Market Cap']?.toLocaleString() || 'N/A'}</div>
                       </div>
                       <div>
                         <div className="text-sm text-gray-600">Book Value</div>
@@ -660,7 +575,11 @@ export default function RealTimeStockDashboard({ portfolioData }: RealTimeStockD
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-gray-600">Abhishek's Call</span>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getAbhishekColor(selectedStock.baseData.Abhishek)}`}>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          selectedStock.baseData.Abhishek === 'Exit' ? 'bg-red-100 text-red-800' :
+                          selectedStock.baseData.Abhishek === 'Buy' ? 'bg-green-100 text-green-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
                           {selectedStock.baseData.Abhishek || 'Hold'}
                         </span>
                       </div>

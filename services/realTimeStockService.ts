@@ -95,32 +95,76 @@ export class RealTimeStockService {
   // Fetch live data from Yahoo Finance
   async fetchYahooFinanceData(symbol: string): Promise<LiveStockData | null> {
     try {
-      // Using Yahoo Finance API (free tier)
-      const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1m&range=1d`);
+      console.log(`Fetching live data for: ${symbol}`);
+      
+      // Use our server-side API route to avoid CORS issues
+      const response = await fetch(`/api/yahoo-finance?symbol=${encodeURIComponent(symbol)}`);
       
       if (!response.ok) {
-        throw new Error(`Yahoo Finance API error: ${response.statusText}`);
+        console.error(`API error for ${symbol}: ${response.status} ${response.statusText}`);
+        return null;
       }
 
       const data = await response.json();
-      const quote = data.chart.result[0].meta;
-      const indicators = data.chart.result[0].indicators.quote[0];
+      
+      if (data.error) {
+        console.error(`API returned error for ${symbol}:`, data.error);
+        return null;
+      }
 
+      console.log(`Successfully fetched live data for ${symbol}: ${data.currentPrice}`);
+      
       return {
         symbol,
-        currentPrice: quote.regularMarketPrice,
-        previousClose: quote.previousClose,
-        change: quote.regularMarketPrice - quote.previousClose,
-        changePercent: ((quote.regularMarketPrice - quote.previousClose) / quote.previousClose) * 100,
-        volume: indicators.volume[indicators.volume.length - 1] || 0,
-        marketCap: quote.marketCap || 0,
-        peRatio: quote.trailingPE || 0,
-        earningsPerShare: quote.trailingEps || 0,
-        dividendYield: quote.dividendYield || 0,
-        lastUpdated: new Date()
+        currentPrice: data.currentPrice,
+        previousClose: data.previousClose,
+        change: data.change,
+        changePercent: data.changePercent,
+        volume: data.volume,
+        marketCap: data.marketCap,
+        peRatio: data.peRatio,
+        earningsPerShare: data.earningsPerShare,
+        dividendYield: data.dividendYield,
+        lastUpdated: new Date(data.lastUpdated)
       };
     } catch (error) {
-      console.error(`Error fetching Yahoo Finance data for ${symbol}:`, error);
+      console.error(`Error fetching live data for ${symbol}:`, error);
+      return null;
+    }
+  }
+
+  // Fetch data using web scraping as fallback
+  async fetchScrapedData(symbol: string): Promise<LiveStockData | null> {
+    try {
+      console.log(`Attempting web scraping for: ${symbol}`);
+      
+      // Try the scraping fallback route
+      const response = await fetch(`/api/scrape-fallback?symbol=${encodeURIComponent(symbol)}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (!data.error) {
+          console.log(`Successfully scraped data for ${symbol}: ${data.currentPrice}`);
+          return {
+            symbol,
+            currentPrice: data.currentPrice,
+            previousClose: data.previousClose,
+            change: data.change,
+            changePercent: data.changePercent,
+            volume: data.volume,
+            marketCap: data.marketCap,
+            peRatio: data.peRatio,
+            earningsPerShare: data.earningsPerShare,
+            dividendYield: data.dividendYield,
+            lastUpdated: new Date(data.lastUpdated)
+          };
+        }
+      }
+
+      console.log(`Web scraping failed for ${symbol}`);
+      return null;
+    } catch (error) {
+      console.error(`Error in web scraping for ${symbol}:`, error);
       return null;
     }
   }
@@ -170,22 +214,36 @@ export class RealTimeStockService {
   // Get symbol mapping for Indian stocks
   private getSymbolMapping(nseBseSymbol: string | number): string {
     const symbolMap: { [key: string]: string } = {
-      'HDFCBANK': 'HDFCBANK.NS', // NSE suffix
-      'BAJFINANCE': 'BAJFINANCE.NS',
+      // Banks
+      'HDFCBANK': 'HDFCBANK.NS',
       'ICICIBANK': 'ICICIBANK.NS',
+      '532174': 'ICICIBANK.NS', // ICICI Bank BSE code
+      
+      // Finance
+      'BAJFINANCE': 'BAJFINANCE.NS',
+      
+      // Consumer Goods
       'DMART': 'DMART.NS',
       'TATACONSUM': 'TATACONSUM.NS',
+      'NESTLEIND': 'NESTLEIND.NS',
+      
+      // Power & Energy
       'TATAPOWER': 'TATAPOWER.NS',
+      
+      // Technology
       'AFFLE': 'AFFLE.NS',
       'LTIM': 'LTIM.NS',
       'KPITTECH': 'KPITTECH.NS',
       'TATATECH': 'TATATECH.NS',
       'TCS': 'TCS.NS',
       'INFY': 'INFY.NS',
-      'NESTLEIND': 'NESTLEIND.NS',
+      
+      // Manufacturing
       'ASTRAL': 'ASTRAL.NS',
       'POLYCAB': 'POLYCAB.NS',
       'CLEAN': 'CLEAN.NS',
+      
+      // Insurance
       'SBLIFE': 'SBILIFE.NS'
     };
 
@@ -194,18 +252,52 @@ export class RealTimeStockService {
   }
 
   // Create hybrid data combining Excel base + live API data
-  createHybridData(baseData: any): HybridStockData {
-    const liveData = null; // Will be populated by API calls
+  async createHybridData(baseData: any): Promise<HybridStockData> {
+    const symbol = baseData['NSE/BSE'];
+    let liveData = null;
+    
+    // Fetch live data immediately if symbol exists
+    if (symbol) {
+      try {
+        console.log(`Initializing live data for: ${symbol}`);
+        
+        // Try Yahoo Finance first, fallback to Alpha Vantage
+        liveData = await this.fetchYahooFinanceData(this.getSymbolMapping(symbol));
+        
+        if (!liveData) {
+          console.log(`Yahoo Finance failed for ${symbol}, trying Alpha Vantage...`);
+          liveData = await this.fetchGoogleFinanceData(this.getSymbolMapping(symbol));
+        }
+
+        // If APIs fail, try web scraping as final fallback
+        if (!liveData) {
+          console.log(`APIs failed for ${symbol}, trying web scraping...`);
+          liveData = await this.fetchScrapedData(this.getSymbolMapping(symbol));
+        }
+      } catch (error) {
+        console.error(`Error fetching initial data for ${symbol}:`, error);
+      }
+    }
+    
+    // Use live price if available, otherwise use CMP from data, then purchase price as final fallback
+    const currentCMP = liveData ? liveData.currentPrice : 
+                      (baseData.CMP && baseData.CMP > 0) ? baseData.CMP : 
+                      (baseData['Purchase Price'] || 0);
+    
+    console.log(`Final CMP for ${symbol}: ${currentCMP} (Live: ${liveData?.currentPrice}, Data CMP: ${baseData.CMP}, Purchase: ${baseData['Purchase Price']})`);
+    
+    const qty = baseData.Qty || 0;
+    const investment = baseData.Investment || 0;
     
     return {
       baseData,
       liveData,
       calculated: {
-        currentCMP: baseData.CMP || 0,
-        presentValue: (baseData.CMP || 0) * (baseData.Qty || 0),
-        gainLoss: ((baseData.CMP || 0) * (baseData.Qty || 0)) - (baseData.Investment || 0),
-        gainLossPercent: baseData.Investment ? 
-          ((((baseData.CMP || 0) * (baseData.Qty || 0)) - baseData.Investment) / baseData.Investment) * 100 : 0,
+        currentCMP,
+        presentValue: currentCMP * qty,
+        gainLoss: (currentCMP * qty) - investment,
+        gainLossPercent: investment > 0 ? 
+          (((currentCMP * qty) - investment) / investment) * 100 : 0,
         portfolioPercentage: baseData['Portfolio (%)'] || 0
       }
     };
@@ -248,6 +340,12 @@ export class RealTimeStockService {
             
             if (!liveData) {
               liveData = await this.fetchGoogleFinanceData(this.getSymbolMapping(symbol));
+            }
+
+            // If APIs fail, try web scraping as final fallback
+            if (!liveData) {
+              console.log(`APIs failed for ${symbol} in real-time update, trying web scraping...`);
+              liveData = await this.fetchScrapedData(this.getSymbolMapping(symbol));
             }
 
             if (liveData) {

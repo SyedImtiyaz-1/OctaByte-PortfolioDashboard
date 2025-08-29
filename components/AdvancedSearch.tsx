@@ -4,7 +4,6 @@ import React from 'react';
 
 interface SearchFilters {
   query: string;
-  sector: string;
   gainLoss: string;
   stage2: string;
   abhishekCall: string;
@@ -32,27 +31,7 @@ export default function AdvancedSearch({ filters, onFiltersChange, onClearFilter
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-        {/* Sector Filter */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Sector</label>
-          <select
-            value={filters.sector}
-            onChange={(e) => handleFilterChange('sector', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="All Sectors">All Sectors</option>
-            <option value="Financial Sector">Financial Sector</option>
-            <option value="Tech Sector">Tech Sector</option>
-            <option value="Consumer Sector">Consumer Sector</option>
-            <option value="Power Sector">Power Sector</option>
-            <option value="Green Sector">Green Sector</option>
-            <option value="Chemical Sector">Chemical Sector</option>
-            <option value="Insurance">Insurance</option>
-            <option value="Exit Stocks">Exit Stocks</option>
-          </select>
-        </div>
-
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Gain/Loss Filter */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Performance</label>
@@ -62,9 +41,8 @@ export default function AdvancedSearch({ filters, onFiltersChange, onClearFilter
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="All">All</option>
-            <option value="Gainers Only">Gainers Only</option>
-            <option value="Losers Only">Losers Only</option>
-            <option value="Break Even">Break Even</option>
+            <option value="Gain">Gain</option>
+            <option value="Loss">Loss</option>
           </select>
         </div>
 
@@ -77,8 +55,8 @@ export default function AdvancedSearch({ filters, onFiltersChange, onClearFilter
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="All">All</option>
-            <option value="Stage-2 Yes">Stage-2 Yes</option>
-            <option value="Stage-2 No">Stage-2 No</option>
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
           </select>
         </div>
 
@@ -93,7 +71,6 @@ export default function AdvancedSearch({ filters, onFiltersChange, onClearFilter
             <option value="All Calls">All Calls</option>
             <option value="Hold">Hold</option>
             <option value="Exit">Exit</option>
-            <option value="Must Exit">Must Exit</option>
           </select>
         </div>
 
